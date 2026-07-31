@@ -1,0 +1,4 @@
+# Development/test dependencies. Installs the runtime deps too.
+# Production (e.g. Render) installs only requirements.txt.
+-r requirements.txt
+pytest==9.1.1

@@ -1,0 +1,5 @@
+fastapi[standard]==0.113.0
+pydantic==2.13.4
+Pillow==12.3.0
+supabase==2.31.0
+python-dotenv==1.2.2
