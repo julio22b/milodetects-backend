@@ -45,6 +45,9 @@ class FakeReadPersistence:
     def get_batch(self, batch_id):
         return CANNED_BATCH if batch_id == "known-batch" else None
 
+    def delete_batch(self, batch_id):
+        return 2 if batch_id == "known-batch" else 0
+
 
 def test_list_batches_returns_grouped_batches(monkeypatch):
     monkeypatch.setattr("app.main.persist", FakeReadPersistence())
@@ -63,4 +66,17 @@ def test_get_batch_returns_images_with_detections(monkeypatch):
 def test_get_unknown_batch_is_404(monkeypatch):
     monkeypatch.setattr("app.main.persist", FakeReadPersistence())
     response = client.get("/batches/does-not-exist")
+    assert response.status_code == 404
+
+
+def test_delete_batch_removes_and_returns_count(monkeypatch):
+    monkeypatch.setattr("app.main.persist", FakeReadPersistence())
+    response = client.delete("/batches/known-batch")
+    assert response.status_code == 200
+    assert response.json() == {"batch_id": "known-batch", "deleted_images": 2}
+
+
+def test_delete_unknown_batch_is_404(monkeypatch):
+    monkeypatch.setattr("app.main.persist", FakeReadPersistence())
+    response = client.delete("/batches/does-not-exist")
     assert response.status_code == 404

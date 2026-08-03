@@ -230,3 +230,14 @@ async def get_batch(batch_id: str):
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
     return batch
+
+
+@app.delete("/batches/{batch_id}")
+async def delete_batch(batch_id: str):
+    loop = asyncio.get_running_loop()
+    removed = await loop.run_in_executor(
+        None, _persistence().delete_batch, batch_id
+    )
+    if removed == 0:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return {"batch_id": batch_id, "deleted_images": removed}

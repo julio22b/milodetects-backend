@@ -50,6 +50,11 @@ class Persistence(Protocol):
         """A single batch with every image and its detections, for re-render."""
         ...
 
+    def delete_batch(self, batch_id: str) -> int:
+        """Delete a batch's Storage images + analyses rows (detections cascade).
+        Returns the number of images removed; 0 if the batch doesn't exist."""
+        ...
+
 
 class SupabasePersistence:
     """Images in Supabase Storage; analyses + detections in Postgres."""
@@ -208,6 +213,27 @@ class SupabasePersistence:
                 for row in rows
             ],
         }
+
+    def delete_batch(self, batch_id: str) -> int:
+        response = (
+            self._client.table("analyses")
+            .select("image_path")
+            .eq("batch_id", batch_id)
+            .execute()
+        )
+        rows = cast(list[dict[str, Any]], response.data or [])
+        if not rows:
+            return 0
+        paths = [row["image_path"] for row in rows if row.get("image_path")]
+
+        # Storage FIRST: a leftover DB row is visible and re-deletable, but a
+        # leftover Storage object is an invisible orphan against the 1 GB quota.
+        if paths:
+            self._client.storage.from_(self._bucket).remove(paths)
+
+        # Detections are removed by the analyses -> detections FK cascade.
+        self._client.table("analyses").delete().eq("batch_id", batch_id).execute()
+        return len(rows)
 
 
 def get_persistence() -> Persistence:
