@@ -29,6 +29,7 @@ class Persistence(Protocol):
         *,
         analysis_id: str,
         batch_id: str,
+        sample: str,
         image_bytes: bytes,
         content_type: str,
         extension: str,
@@ -71,6 +72,7 @@ class SupabasePersistence:
         *,
         analysis_id,
         batch_id,
+        sample,
         image_bytes,
         content_type,
         extension,
@@ -92,6 +94,7 @@ class SupabasePersistence:
             {
                 "id": analysis_id,
                 "batch_id": batch_id,
+                "sample": sample,
                 "image_path": key,
                 "content_type": content_type,
                 "status": "processing",
@@ -148,7 +151,7 @@ class SupabasePersistence:
             list[dict[str, Any]],
             (
                 self._client.table("analyses")
-                .select("id,batch_id,created_at,image_path,status,summary")
+                .select("id,batch_id,created_at,image_path,status,summary,sample")
                 .in_("batch_id", batch_ids)
                 .order("created_at")
                 .execute()
@@ -167,6 +170,7 @@ class SupabasePersistence:
             batches.append(
                 {
                     "batch_id": bid,
+                    "sample": images[0].get("sample"),
                     "created_at": images[0]["created_at"],
                     "image_count": len(images),
                     "summary": _aggregate_summary(img["summary"] for img in images),
@@ -187,7 +191,7 @@ class SupabasePersistence:
         response = (
             self._client.table("analyses")
             .select(
-                "id,created_at,image_path,content_type,status,summary,"
+                "id,created_at,image_path,content_type,status,summary,sample,"
                 "detections(cell_type,confidence,x,y,width,height)"
             )
             .eq("batch_id", batch_id)
@@ -200,6 +204,7 @@ class SupabasePersistence:
 
         return {
             "batch_id": batch_id,
+            "sample": rows[0].get("sample"),
             "created_at": rows[0]["created_at"],
             "images": [
                 {

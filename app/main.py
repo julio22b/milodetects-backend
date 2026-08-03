@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps
 
@@ -119,7 +119,16 @@ async def root():
 
 
 @app.post("/analyze")
-async def analyze(files: list[UploadFile] = File(...)):
+async def analyze(
+    files: list[UploadFile] = File(...),
+    sample: str = Form(..., max_length=8),
+):
+    # A missing `sample` is already a 422 from FastAPI; this catches a value that
+    # is present but blank/whitespace-only.
+    sample = sample.strip()
+    if not sample:
+        raise HTTPException(status_code=400, detail="sample is required")
+
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
     if len(files) > MAX_IMAGES:
@@ -187,6 +196,7 @@ async def analyze(files: list[UploadFile] = File(...)):
                     backend.save_analysis,
                     analysis_id=analysis_id,
                     batch_id=batch_id,
+                    sample=sample,
                     image_bytes=image_bytes,
                     content_type=STORED_CONTENT_TYPE,
                     extension=STORED_EXTENSION,
@@ -212,7 +222,12 @@ async def analyze(files: list[UploadFile] = File(...)):
             }
         )
 
-    return {"count": len(results), "batch_id": batch_id, "results": results}
+    return {
+        "count": len(results),
+        "batch_id": batch_id,
+        "sample": sample,
+        "results": results,
+    }
 
 
 @app.get("/batches")

@@ -9,12 +9,13 @@ class FakePersistence:
     def __init__(self):
         self.saved = []
 
-    def save_analysis(self, *, analysis_id, batch_id, image_bytes, content_type,
-                      extension, summary, detections):
+    def save_analysis(self, *, analysis_id, batch_id, sample, image_bytes,
+                      content_type, extension, summary, detections):
         self.saved.append(
             {
                 "analysis_id": analysis_id,
                 "batch_id": batch_id,
+                "sample": sample,
                 "content_type": content_type,
                 "extension": extension,
                 "summary": summary,

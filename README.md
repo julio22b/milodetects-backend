@@ -22,10 +22,14 @@ backend/
 
 ## Endpoints
 
-- `POST /analyze` — upload up to 10 images; persists each to Supabase and returns
-  per-image detections + a `batch_id`.
-- `GET /batches` — recent batches, newest first.
+- `POST /analyze` — upload up to 10 images with a required `sample` form field (a
+  text id, ≤8 chars, identifying the batch); persists each to Supabase and returns
+  per-image detections plus the `batch_id` and `sample`.
+- `GET /batches?limit=N` — the N most recent batches, newest first (default 50,
+  max 100). e.g. `?limit=3` for a "recent analyses" section.
 - `GET /batches/{batch_id}` — one batch's images + detections, for re-render.
+- `DELETE /batches/{batch_id}` — delete a batch: its Storage images and rows
+  (detections cascade). 404 if unknown.
 
 ## Setup
 
@@ -79,6 +83,8 @@ startup if `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` aren't set.
      id            uuid primary key default gen_random_uuid(),
      created_at    timestamptz not null default now(),
      batch_id      uuid,
+     sample        text not null           -- user-entered batch id
+                     check (char_length(sample) between 1 and 8),
      image_path    text not null,          -- Storage key, never a URL
      content_type  text not null,
      status        text not null default 'processing'
@@ -105,6 +111,17 @@ startup if `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` aren't set.
    );
    create index detections_analysis_id_idx on detections (analysis_id);
    ```
+
+   > **Existing project (adding `sample` to a table that already has rows):**
+   > `NOT NULL` can't be added directly, so add → backfill → enforce:
+   >
+   > ```sql
+   > alter table analyses add column sample text;
+   > update analyses set sample = '0000' where sample is null;  -- 4-digit placeholder
+   > alter table analyses
+   >   alter column sample set not null,
+   >   add constraint analyses_sample_len check (char_length(sample) between 1 and 8);
+   > ```
 
 3. **Enable RLS with NO policies** on both tables. With no policies, the shared
    project's anon key can read/write nothing here, while this backend's

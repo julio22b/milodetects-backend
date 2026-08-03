@@ -14,6 +14,8 @@ from app.main import (
 
 client = TestClient(app)
 
+SAMPLE = "S-100"  # a valid sample id (<= 8 chars); /analyze requires one
+
 
 def make_png_bytes() -> bytes:
     """A tiny valid PNG we can upload without needing a real file on disk."""
@@ -47,12 +49,13 @@ def test_root_says_hello():
 
 
 def test_analyze_response_shape():
-    response = client.post("/analyze", files=png_uploads(3))
+    response = client.post("/analyze", files=png_uploads(3), data={"sample": SAMPLE})
     assert response.status_code == 200
 
     body = response.json()
     assert body["count"] == 3
     assert is_uuid(body["batch_id"])
+    assert body["sample"] == SAMPLE  # echoed back at the top level
 
     for result in body["results"]:
         assert result["status"] == "ok"
@@ -66,7 +69,7 @@ def test_analyze_response_shape():
 
 
 def test_analyze_persists_each_image(fake_persist):
-    body = client.post("/analyze", files=png_uploads(2)).json()
+    body = client.post("/analyze", files=png_uploads(2), data={"sample": SAMPLE}).json()
 
     assert body["count"] == 2
     assert len(fake_persist.saved) == 2  # save_analysis called once per image
@@ -78,6 +81,7 @@ def test_analyze_persists_each_image(fake_persist):
     # The stored copy is a downscaled JPEG, so content_type/extension describe it.
     assert fake_persist.saved[0]["content_type"] == "image/jpeg"
     assert fake_persist.saved[0]["extension"] == ".jpg"
+    assert fake_persist.saved[0]["sample"] == SAMPLE  # batch-level id on every row
 
     first = body["results"][0]
     assert first["id"] == fake_persist.saved[0]["analysis_id"]  # id == analysis id
@@ -94,7 +98,7 @@ def test_analyze_preserves_order_with_a_bad_image(fake_persist):
         ("files", ("c", make_png_bytes(), "image/png")),
     ]
 
-    body = client.post("/analyze", files=files).json()
+    body = client.post("/analyze", files=files, data={"sample": SAMPLE}).json()
 
     # Order-correlated: results[i] matches files[i].
     assert [r["status"] for r in body["results"]] == ["ok", "error", "ok"]
@@ -108,7 +112,7 @@ def test_analyze_error_result_when_persistence_fails(monkeypatch, fake_persist):
 
     monkeypatch.setattr(fake_persist, "save_analysis", boom)
 
-    body = client.post("/analyze", files=png_uploads(1)).json()
+    body = client.post("/analyze", files=png_uploads(1), data={"sample": SAMPLE}).json()
 
     assert body["count"] == 1
     result = body["results"][0]
@@ -117,14 +121,29 @@ def test_analyze_error_result_when_persistence_fails(monkeypatch, fake_persist):
 
 
 def test_analyze_rejects_too_many_files():
-    response = client.post("/analyze", files=png_uploads(MAX_IMAGES + 1))
+    response = client.post(
+        "/analyze", files=png_uploads(MAX_IMAGES + 1), data={"sample": SAMPLE}
+    )
     assert response.status_code == 400
+
+
+def test_analyze_requires_sample():
+    # Missing the `sample` form field -> FastAPI validation 422.
+    response = client.post("/analyze", files=png_uploads(1))
+    assert response.status_code == 422
+
+
+def test_analyze_rejects_blank_sample(fake_persist):
+    # Present but whitespace-only -> our explicit 400, before anything is saved.
+    response = client.post("/analyze", files=png_uploads(1), data={"sample": "   "})
+    assert response.status_code == 400
+    assert fake_persist.saved == []
 
 
 def test_analyze_rejects_oversized_file(fake_persist, monkeypatch):
     monkeypatch.setattr("app.main.MAX_IMAGE_BYTES", 10)  # tiny cap for the test
 
-    body = client.post("/analyze", files=png_uploads(1)).json()
+    body = client.post("/analyze", files=png_uploads(1), data={"sample": SAMPLE}).json()
 
     result = body["results"][0]
     assert result["status"] == "error"

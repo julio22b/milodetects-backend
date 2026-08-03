@@ -7,6 +7,7 @@ client = TestClient(app)
 CANNED_BATCHES = [
     {
         "batch_id": "batch-1",
+        "sample": "S-100",
         "created_at": "2026-07-30T10:00:00Z",
         "image_count": 2,
         "summary": {"WBC": 6, "RBC": 56, "Platelet": 18},
@@ -21,6 +22,7 @@ CANNED_BATCHES = [
 
 CANNED_BATCH = {
     "batch_id": "known-batch",
+    "sample": "S-100",
     "created_at": "2026-07-30T10:00:00Z",
     "images": [
         {

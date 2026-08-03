@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
+SAMPLE = "S-100"  # canonical valid sample id used across these tests
+
 
 class FakeTable:
     def __init__(self, client, name):
@@ -78,6 +80,7 @@ def save(persistence, **overrides):
     kwargs = dict(
         analysis_id="A",
         batch_id="B",
+        sample=SAMPLE,
         image_bytes=b"img",
         content_type="image/png",
         extension=".png",
@@ -106,6 +109,7 @@ def test_save_analysis_happy_path_sequence(monkeypatch):
     )
     assert analyses_insert["id"] == "A"
     assert analyses_insert["batch_id"] == "B"
+    assert analyses_insert["sample"] == SAMPLE
     assert analyses_insert["status"] == "processing"
 
     # ...detections inserted as ONE bulk list, each stamped with analysis_id...
@@ -189,6 +193,7 @@ def _row(batch_id, i, created_at):
     return {
         "id": f"{batch_id}-img{i}",
         "batch_id": batch_id,
+        "sample": SAMPLE,
         "created_at": created_at,
         "image_path": f"analyses/{batch_id}-img{i}.jpg",
         "status": "completed",
@@ -214,6 +219,7 @@ def test_list_batches_returns_whole_batches_not_truncated(monkeypatch):
     assert len(batches) == 1
     batch = batches[0]
     assert batch["batch_id"] == "B2"  # most recent batch
+    assert batch["sample"] == SAMPLE  # surfaced at batch level
     assert batch["image_count"] == 3  # whole batch, not truncated
     assert len(batch["images"]) == 3
     assert batch["summary"] == {"WBC": 3, "RBC": 6, "Platelet": 0}  # aggregated
