@@ -58,7 +58,7 @@ def test_analyze_response_shape():
     assert body["sample"] == SAMPLE  # echoed back at the top level
 
     for result in body["results"]:
-        assert result["status"] == "ok"
+        assert result["status"] == "completed"
         assert is_uuid(result["id"])
         assert result["id"] in result["image_url"]  # one identifier throughout
         assert result["image_url"].endswith(".jpg")  # stored as downscaled JPEG
@@ -101,7 +101,7 @@ def test_analyze_preserves_order_with_a_bad_image(fake_persist):
     body = client.post("/analyze", files=files, data={"sample": SAMPLE}).json()
 
     # Order-correlated: results[i] matches files[i].
-    assert [r["status"] for r in body["results"]] == ["ok", "error", "ok"]
+    assert [r["status"] for r in body["results"]] == ["completed", "failed", "completed"]
     assert body["results"][1]["id"] is None
     assert len(fake_persist.saved) == 2  # only the two valid images were persisted
 
@@ -116,7 +116,7 @@ def test_analyze_error_result_when_persistence_fails(monkeypatch, fake_persist):
 
     assert body["count"] == 1
     result = body["results"][0]
-    assert result["status"] == "error"
+    assert result["status"] == "failed"
     assert result["id"] is None
 
 
@@ -127,17 +127,18 @@ def test_analyze_rejects_too_many_files():
     assert response.status_code == 400
 
 
-def test_analyze_requires_sample():
-    # Missing the `sample` form field -> FastAPI validation 422.
-    response = client.post("/analyze", files=png_uploads(1))
-    assert response.status_code == 422
+def test_analyze_defaults_sample_when_omitted(fake_persist):
+    # `sample` is optional for now; omitting it falls back to the placeholder.
+    body = client.post("/analyze", files=png_uploads(1)).json()
+    assert body["sample"] == "TEST"
+    assert fake_persist.saved[0]["sample"] == "TEST"
 
 
-def test_analyze_rejects_blank_sample(fake_persist):
-    # Present but whitespace-only -> our explicit 400, before anything is saved.
-    response = client.post("/analyze", files=png_uploads(1), data={"sample": "   "})
-    assert response.status_code == 400
-    assert fake_persist.saved == []
+def test_analyze_blank_sample_falls_back_to_default(fake_persist):
+    # Present but whitespace-only also uses the placeholder default.
+    body = client.post("/analyze", files=png_uploads(1), data={"sample": "   "}).json()
+    assert body["sample"] == "TEST"
+    assert fake_persist.saved[0]["sample"] == "TEST"
 
 
 def test_analyze_rejects_oversized_file(fake_persist, monkeypatch):
@@ -146,7 +147,7 @@ def test_analyze_rejects_oversized_file(fake_persist, monkeypatch):
     body = client.post("/analyze", files=png_uploads(1), data={"sample": SAMPLE}).json()
 
     result = body["results"][0]
-    assert result["status"] == "error"
+    assert result["status"] == "failed"
     assert "too large" in result["error"].lower()
     assert result["id"] is None
     assert fake_persist.saved == []  # rejected before being read or persisted

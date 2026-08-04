@@ -121,13 +121,11 @@ async def root():
 @app.post("/analyze")
 async def analyze(
     files: list[UploadFile] = File(...),
-    sample: str = Form(..., max_length=8),
+    sample: str = Form("TEST", max_length=8),
 ):
-    # A missing `sample` is already a 422 from FastAPI; this catches a value that
-    # is present but blank/whitespace-only.
-    sample = sample.strip()
-    if not sample:
-        raise HTTPException(status_code=400, detail="sample is required")
+    # `sample` is temporarily optional: absent or blank/whitespace-only falls back
+    # to a placeholder until the frontend always sends one.
+    sample = sample.strip() or "TEST"
 
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
@@ -148,7 +146,7 @@ async def analyze(
         if file.size is not None and file.size > MAX_IMAGE_BYTES:
             mb = MAX_IMAGE_BYTES // (1024 * 1024)
             results.append(
-                {"id": None, "status": "error", "error": f"File too large (max {mb} MB)"}
+                {"id": None, "status": "failed", "error": f"File too large (max {mb} MB)"}
             )
             continue
 
@@ -157,7 +155,7 @@ async def analyze(
         try:
             _validate_image(contents)  # ensure it's a supported image
         except InvalidUpload as exc:
-            results.append({"id": None, "status": "error", "error": str(exc)})
+            results.append({"id": None, "status": "failed", "error": str(exc)})
             continue
 
         try:
@@ -207,14 +205,14 @@ async def analyze(
         except Exception:
             logger.exception("Failed to analyze/persist an uploaded image")
             results.append(
-                {"id": None, "status": "error", "error": "Failed to save analysis"}
+                {"id": None, "status": "failed", "error": "Failed to save analysis"}
             )
             continue
 
         results.append(
             {
                 "id": analysis_id,
-                "status": "ok",
+                "status": "completed",
                 "content_type": STORED_CONTENT_TYPE,
                 "image_url": backend.public_url(image_path),
                 "detections": detection_dicts,

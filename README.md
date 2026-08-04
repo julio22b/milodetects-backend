@@ -22,9 +22,9 @@ backend/
 
 ## Endpoints
 
-- `POST /analyze` — upload up to 10 images with a required `sample` form field (a
-  text id, ≤8 chars, identifying the batch); persists each to Supabase and returns
-  per-image detections plus the `batch_id` and `sample`.
+- `POST /analyze` — upload up to 10 images with an optional `sample` form field (a
+  text id, ≤8 chars, identifying the batch; defaults to `TEST` for now); persists
+  each to Supabase and returns per-image detections plus the `batch_id` and `sample`.
 - `GET /batches?limit=N` — the N most recent batches, newest first (default 50,
   max 100). e.g. `?limit=3` for a "recent analyses" section.
 - `GET /batches/{batch_id}` — one batch's images + detections, for re-render.
