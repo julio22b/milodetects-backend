@@ -62,12 +62,12 @@ Configuration comes from environment variables, loaded from a local `.env` file
 (git-ignored) if present. **Supabase is required** — the server fails fast at
 startup if `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` aren't set.
 
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `SUPABASE_URL` | — (required) | Project URL. |
-| `SUPABASE_SERVICE_KEY` | — (required) | **service_role** key. Server-only — never ship it to the frontend. |
-| `SUPABASE_BUCKET` | `milodetects-smears` | Storage bucket for images. |
-| `ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins for CORS. |
+| Variable               | Default                 | Notes                                                              |
+| ---------------------- | ----------------------- | ------------------------------------------------------------------ |
+| `SUPABASE_URL`         | — (required)            | Project URL.                                                       |
+| `SUPABASE_SERVICE_KEY` | — (required)            | **service_role** key. Server-only — never ship it to the frontend. |
+| `SUPABASE_BUCKET`      | `milodetects-smears`    | Storage bucket for images.                                         |
+| `ALLOWED_ORIGINS`      | `http://localhost:5173` | Comma-separated browser origins for CORS.                          |
 
 ### Supabase setup (one-time)
 
@@ -78,66 +78,66 @@ startup if `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` aren't set.
 1. **Storage** → create a bucket named `milodetects-smears` (public).
 2. **SQL editor** → create the tables:
 
-   ```sql
-   create table analyses (
-     id            uuid primary key default gen_random_uuid(),
-     created_at    timestamptz not null default now(),
-     batch_id      uuid,
-     sample        text not null           -- user-entered batch id
-                     check (char_length(sample) between 1 and 8),
-     image_path    text not null,          -- Storage key, never a URL
-     content_type  text not null,
-     status        text not null default 'processing'
-                     check (status in ('processing','completed','failed')),
-     error_message text,
-     smear_type    text not null default 'blood'
-                     check (smear_type in ('blood','urine','feces')),
-     notes         text,
-     summary       jsonb,
-     user_id       uuid
-   );
-   create index analyses_created_at_idx on analyses (created_at desc);
-   create index analyses_batch_id_idx  on analyses (batch_id);
+    ```sql
+    create table analyses (
+      id            uuid primary key default gen_random_uuid(),
+      created_at    timestamptz not null default now(),
+      batch_id      uuid,
+      sample        text not null           -- user-entered batch id
+                      check (char_length(sample) between 1 and 8),
+      image_path    text not null,          -- Storage key, never a URL
+      content_type  text not null,
+      status        text not null default 'processing'
+                      check (status in ('processing','completed','failed')),
+      error_message text,
+      smear_type    text not null default 'blood'
+                      check (smear_type in ('blood','urine','feces')),
+      notes         text,
+      summary       jsonb,
+      user_id       uuid
+    );
+    create index analyses_created_at_idx on analyses (created_at desc);
+    create index analyses_batch_id_idx  on analyses (batch_id);
 
-   create table detections (
-     id          uuid primary key default gen_random_uuid(),
-     analysis_id uuid not null references analyses(id) on delete cascade,
-     cell_type   text not null check (cell_type in ('WBC','RBC','Platelet')),
-     confidence  real not null check (confidence between 0 and 1),
-     x           real not null check (x between 0 and 1),
-     y           real not null check (y between 0 and 1),
-     width       real not null check (width between 0 and 1),
-     height      real not null check (height between 0 and 1)
-   );
-   create index detections_analysis_id_idx on detections (analysis_id);
-   ```
+    create table detections (
+      id          uuid primary key default gen_random_uuid(),
+      analysis_id uuid not null references analyses(id) on delete cascade,
+      cell_type   text not null check (cell_type in ('WBC','RBC','Platelets')),
+      confidence  real not null check (confidence between 0 and 1),
+      x           real not null check (x between 0 and 1),
+      y           real not null check (y between 0 and 1),
+      width       real not null check (width between 0 and 1),
+      height      real not null check (height between 0 and 1)
+    );
+    create index detections_analysis_id_idx on detections (analysis_id);
+    ```
 
-   > **Existing project (adding `sample` to a table that already has rows):**
-   > `NOT NULL` can't be added directly, so add → backfill → enforce:
-   >
-   > ```sql
-   > alter table analyses add column sample text;
-   > update analyses set sample = '0000' where sample is null;  -- 4-digit placeholder
-   > alter table analyses
-   >   alter column sample set not null,
-   >   add constraint analyses_sample_len check (char_length(sample) between 1 and 8);
-   > ```
+    > **Existing project (adding `sample` to a table that already has rows):**
+    > `NOT NULL` can't be added directly, so add → backfill → enforce:
+    >
+    > ```sql
+    > alter table analyses add column sample text;
+    > update analyses set sample = '0000' where sample is null;  -- 4-digit placeholder
+    > alter table analyses
+    >   alter column sample set not null,
+    >   add constraint analyses_sample_len check (char_length(sample) between 1 and 8);
+    > ```
 
 3. **Enable RLS with NO policies** on both tables. With no policies, the shared
    project's anon key can read/write nothing here, while this backend's
    `service_role` key bypasses RLS and works unchanged:
 
-   ```sql
-   alter table analyses  enable row level security;
-   alter table detections enable row level security;
-   ```
+    ```sql
+    alter table analyses  enable row level security;
+    alter table detections enable row level security;
+    ```
 
 4. Put the credentials in `.env`:
 
-   ```
-   SUPABASE_URL=https://<project>.supabase.co
-   SUPABASE_SERVICE_KEY=<service_role key>
-   ```
+    ```
+    SUPABASE_URL=https://<project>.supabase.co
+    SUPABASE_SERVICE_KEY=<service_role key>
+    ```
 
 > **Troubleshooting:** if inserts appear to succeed but write nothing, the
 > backend is using the anon key by mistake — confirm `SUPABASE_SERVICE_KEY`

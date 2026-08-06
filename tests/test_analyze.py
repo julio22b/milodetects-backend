@@ -65,7 +65,7 @@ def test_analyze_response_shape():
         assert result["content_type"] == "image/jpeg"
         assert "filename" not in result and "saved_path" not in result
 
-    assert body["results"][0]["summary"] == {"WBC": 3, "RBC": 28, "Platelet": 9}
+    assert body["results"][0]["summary"] == {"WBC": 3, "RBC": 28, "Platelets": 9}
 
 
 def test_analyze_persists_each_image(fake_persist):
@@ -76,7 +76,7 @@ def test_analyze_persists_each_image(fake_persist):
     # Detections handed over as ONE bulk list of plain dicts.
     detections = fake_persist.saved[0]["detections"]
     assert isinstance(detections, list) and len(detections) == 40
-    assert detections[0]["cell_type"] in {"WBC", "RBC", "Platelet"}
+    assert detections[0]["cell_type"] in {"WBC", "RBC", "Platelets"}
 
     # The stored copy is a downscaled JPEG, so content_type/extension describe it.
     assert fake_persist.saved[0]["content_type"] == "image/jpeg"

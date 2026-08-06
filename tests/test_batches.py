@@ -10,12 +10,12 @@ CANNED_BATCHES = [
         "sample": "S-100",
         "created_at": "2026-07-30T10:00:00Z",
         "image_count": 2,
-        "summary": {"WBC": 6, "RBC": 56, "Platelet": 18},
+        "summary": {"WBC": 6, "RBC": 56, "Platelets": 18},
         "images": [
             {"id": "a", "image_url": "https://x/a.png", "status": "completed",
-             "summary": {"WBC": 3, "RBC": 28, "Platelet": 9}},
+             "summary": {"WBC": 3, "RBC": 28, "Platelets": 9}},
             {"id": "b", "image_url": "https://x/b.png", "status": "completed",
-             "summary": {"WBC": 3, "RBC": 28, "Platelet": 9}},
+             "summary": {"WBC": 3, "RBC": 28, "Platelets": 9}},
         ],
     }
 ]
@@ -30,7 +30,7 @@ CANNED_BATCH = {
             "image_url": "https://x/a.png",
             "content_type": "image/png",
             "status": "completed",
-            "summary": {"WBC": 3, "RBC": 28, "Platelet": 9},
+            "summary": {"WBC": 3, "RBC": 28, "Platelets": 9},
             "detections": [
                 {"cell_type": "RBC", "confidence": 0.9,
                  "x": 0.5, "y": 0.5, "width": 0.1, "height": 0.1}

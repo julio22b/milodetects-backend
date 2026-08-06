@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 class CellType(str, Enum):
     WBC = "WBC"
     RBC = "RBC"
-    PLATELET = "Platelet"
+    PLATELETS = "Platelets"
  
  
 class Detection(BaseModel):
@@ -59,5 +59,5 @@ def predict(image_bytes: bytes) -> list[Detection]:
     for _ in range(3):   # a few larger, high-confidence WBCs
         detections.append(_box(CellType.WBC, 0.16, (0.85, 0.99)))
     for _ in range(9):   # small, noisier platelets
-        detections.append(_box(CellType.PLATELET, 0.04, (0.55, 0.90)))
+        detections.append(_box(CellType.PLATELETS, 0.04, (0.55, 0.90)))
     return detections

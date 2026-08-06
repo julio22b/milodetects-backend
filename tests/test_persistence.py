@@ -84,7 +84,7 @@ def save(persistence, **overrides):
         image_bytes=b"img",
         content_type="image/png",
         extension=".png",
-        summary={"WBC": 1, "RBC": 1, "Platelet": 0},
+        summary={"WBC": 1, "RBC": 1, "Platelets": 0},
         detections=DETECTIONS,
     )
     kwargs.update(overrides)
@@ -197,7 +197,7 @@ def _row(batch_id, i, created_at):
         "created_at": created_at,
         "image_path": f"analyses/{batch_id}-img{i}.jpg",
         "status": "completed",
-        "summary": {"WBC": 1, "RBC": 2, "Platelet": 0},
+        "summary": {"WBC": 1, "RBC": 2, "Platelets": 0},
     }
 
 
@@ -222,7 +222,7 @@ def test_list_batches_returns_whole_batches_not_truncated(monkeypatch):
     assert batch["sample"] == SAMPLE  # surfaced at batch level
     assert batch["image_count"] == 3  # whole batch, not truncated
     assert len(batch["images"]) == 3
-    assert batch["summary"] == {"WBC": 3, "RBC": 6, "Platelet": 0}  # aggregated
+    assert batch["summary"] == {"WBC": 3, "RBC": 6, "Platelets": 0}  # aggregated
     # Earliest image's timestamp — consistent with get_batch.
     assert batch["created_at"] == "2026-07-30T10:00:00Z"
     assert batch["images"][0]["image_url"].startswith("https://x.supabase.co/")
