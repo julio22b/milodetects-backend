@@ -28,9 +28,24 @@ def _persistence() -> Persistence:
     return persist
 
 
+# Inference engine, built once and kept resident (loading the model per request
+# would add seconds to every analysis). Lazy like `persist` so importing this
+# module needs no ML deps; the lifespan forces it at startup so a bad
+# INFERENCE_ENGINE or missing weights fails the boot instead of the first request.
+engine: detection.DetectionEngine | None = None
+
+
+def _engine() -> detection.DetectionEngine:
+    global engine
+    if engine is None:
+        engine = detection.get_engine(config.INFERENCE_ENGINE)
+    return engine
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _persistence()  # fail fast if Supabase isn't configured
+    _engine()  # fail fast (and load the model once) if inference is misconfigured
     yield
 
 
@@ -136,6 +151,7 @@ async def analyze(
         )
 
     backend = _persistence()
+    detector = _engine()
     loop = asyncio.get_running_loop()
     batch_id = str(uuid4())
     results = []
@@ -166,7 +182,7 @@ async def analyze(
             )
 
             # Inference runs on the upright, full-resolution bytes.
-            detections = await loop.run_in_executor(None, detection.predict, upright)
+            detections = await loop.run_in_executor(None, detector.predict, upright)
             detection_dicts = [
                 {
                     "cell_type": item.cell_type.value,

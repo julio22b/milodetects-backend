@@ -22,6 +22,20 @@ def _origins(raw: str) -> list[str]:
 # Browser origins allowed to call the API. Defaults to the Vite dev server.
 ALLOWED_ORIGINS = _origins(os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173"))
 
+# Inference engine. "mock" (default) returns hardcoded detections and needs no ML
+# deps installed, so the app boots and tests run out of the box; "yolo" loads the
+# trained YOLOv8 weights and runs real detection. Production MUST set
+# INFERENCE_ENGINE=yolo — the mock default means an unconfigured deploy would
+# silently serve fake results.
+INFERENCE_ENGINE = os.environ.get("INFERENCE_ENGINE", "mock")
+# Passed straight to YOLO's predict(). CONFIDENCE_THRESHOLD drops low-score boxes;
+# IOU_THRESHOLD tunes NMS duplicate-merging (the model double-boxes clustered RBCs).
+CONFIDENCE_THRESHOLD = float(os.environ.get("CONFIDENCE_THRESHOLD", "0.25"))
+IOU_THRESHOLD = float(os.environ.get("IOU_THRESHOLD", "0.45"))
+# Committed to the repo (~6 MB); never downloaded at runtime. Relative to the CWD
+# the server runs from (backend/).
+YOLO_WEIGHTS_PATH = os.environ.get("YOLO_WEIGHTS_PATH", "weights/best.pt")
+
 # Supabase. SUPABASE_SERVICE_KEY must be the *service_role* key: it's trusted,
 # bypasses RLS, and must never be exposed to the frontend.
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")

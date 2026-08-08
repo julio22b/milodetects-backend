@@ -3,3 +3,12 @@ pydantic==2.13.4
 Pillow==12.3.0
 supabase==2.31.0
 python-dotenv==1.2.2
+
+# Real inference (INFERENCE_ENGINE=yolo). CPU-only torch. On Linux (Render) pin the
+# explicit +cpu build so the resolver can't fall back to the default CUDA wheel
+# (~2 GB, OOMs the free tier); the +cpu wheels live on the extra index below. macOS
+# has no +cpu variant — its normal PyPI wheel is already CPU/MPS — so pin plain there.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu ; sys_platform == 'linux'
+torch==2.13.0 ; sys_platform != 'linux'
+ultralytics==8.4.115

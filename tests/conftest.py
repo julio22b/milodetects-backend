@@ -39,7 +39,11 @@ def fake_persist(monkeypatch):
     """Every test runs against an in-memory persistence backend, so the suite is
     hermetic and needs no Supabase config. Request this fixture to inspect what
     was saved; override app.main.persist directly for custom read data.
+
+    Also clears the lazily-built inference engine so each test rebuilds it from the
+    current config (default: the mock) instead of inheriting a prior test's engine.
     """
     fake = FakePersistence()
     monkeypatch.setattr(main, "persist", fake)
+    monkeypatch.setattr(main, "engine", None)
     return fake
