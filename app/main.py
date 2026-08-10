@@ -61,9 +61,11 @@ app.add_middleware(
 
 ALLOWED_FORMATS = {"PNG", "JPEG"}
 MAX_IMAGES = config.MAX_IMAGES
-# Redundant with Supabase's 10 MB Storage limit, but rejects an oversized upload
-# before it's read into memory.
-MAX_IMAGE_BYTES = 10 * 1024 * 1024
+# Guards memory/DoS, NOT Supabase's Storage limit: the original is only held in
+# memory for inference + downscaling, and the copy sent to Storage is the small
+# downscaled JPEG. Phone cameras routinely emit 12-15 MB PNGs (Chrome mobile
+# especially), so keep this generous or every phone upload is rejected.
+MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
 # Stored images are downscaled to this longest-side size and re-encoded as JPEG
 # to keep Storage small (~1 GB free tier). Detections are normalised (0..1), so
