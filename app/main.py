@@ -87,7 +87,7 @@ def _validate_image(contents: bytes) -> None:
         raise InvalidUpload("File is not a valid image")
 
     if image_format not in ALLOWED_FORMATS:
-        raise InvalidUpload("File type not allowed")
+        raise InvalidUpload(f"File type not allowed (detected {image_format})")
 
 
 def _normalize_orientation(contents: bytes) -> bytes:
@@ -161,6 +161,10 @@ async def analyze(
     for file in files:
         if file.size is not None and file.size > MAX_IMAGE_BYTES:
             mb = MAX_IMAGE_BYTES // (1024 * 1024)
+            logger.warning(
+                "Rejected upload (too large): name=%s content_type=%s size=%s",
+                file.filename, file.content_type, file.size,
+            )
             results.append(
                 {"id": None, "status": "failed", "error": f"File too large (max {mb} MB)"}
             )
@@ -171,6 +175,12 @@ async def analyze(
         try:
             _validate_image(contents)  # ensure it's a supported image
         except InvalidUpload as exc:
+            # Logged so the Render logs reveal what a client actually sent (e.g. a
+            # WebP/HEIC the browser produced) — the reason never reaches the UI.
+            logger.warning(
+                "Rejected upload: name=%s content_type=%s size=%s reason=%s",
+                file.filename, file.content_type, len(contents), exc,
+            )
             results.append({"id": None, "status": "failed", "error": str(exc)})
             continue
 
