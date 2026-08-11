@@ -142,7 +142,14 @@ class YoloEngine:
     """
 
     def __init__(self, weights_path: str, confidence: float, iou: float) -> None:
-        from ultralytics import YOLO  # lazy: heavy, optional dependency
+        import torch  # lazy: heavy, optional dependency
+        from ultralytics import YOLO
+
+        # Cap torch's CPU thread pool before inference if configured — avoids thread
+        # thrashing on fractional-CPU hosts. Set once at startup, before predict().
+        if config.TORCH_NUM_THREADS is not None:
+            torch.set_num_threads(config.TORCH_NUM_THREADS)
+            logger.info("torch intra-op threads capped at %d", config.TORCH_NUM_THREADS)
 
         try:
             self._model = YOLO(weights_path)

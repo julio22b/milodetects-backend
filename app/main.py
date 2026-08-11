@@ -1,6 +1,7 @@
 import io
 import asyncio
 import logging
+import time
 from collections import Counter
 from contextlib import asynccontextmanager
 from functools import partial
@@ -205,14 +206,20 @@ async def analyze(
             continue
 
         try:
+            # Per-phase timing so a slow /analyze can be attributed to inference vs.
+            # image work vs. the Supabase round-trip, instead of guessing.
+            t0 = time.perf_counter()
+
             # Normalize EXIF orientation once so inference and the stored image
             # share one grid (keeps boxes aligned; fixes sideways phone photos).
             upright = await loop.run_in_executor(
                 None, _normalize_orientation, contents
             )
+            t_orient = time.perf_counter()
 
             # Inference runs on the upright, full-resolution bytes.
             detections = await loop.run_in_executor(None, detector.predict, upright)
+            t_infer = time.perf_counter()
             detection_dicts = [
                 {
                     "cell_type": item.cell_type.value,
@@ -232,6 +239,7 @@ async def analyze(
             image_bytes = await loop.run_in_executor(
                 None, _downscale_to_jpeg, upright
             )
+            t_downscale = time.perf_counter()
 
             analysis_id = str(uuid4())
             image_path = await loop.run_in_executor(
@@ -247,6 +255,16 @@ async def analyze(
                     summary=summary,
                     detections=detection_dicts,
                 ),
+            )
+            t_save = time.perf_counter()
+            logger.info(
+                "analyze timing (s): orient=%.2f infer=%.2f downscale=%.2f "
+                "save=%.2f total=%.2f",
+                t_orient - t0,
+                t_infer - t_orient,
+                t_downscale - t_infer,
+                t_save - t_downscale,
+                t_save - t0,
             )
         except Exception:
             logger.exception("Failed to analyze/persist an uploaded image")

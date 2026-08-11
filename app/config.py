@@ -35,6 +35,13 @@ IOU_THRESHOLD = float(os.environ.get("IOU_THRESHOLD", "0.45"))
 # Committed to the repo (~6 MB); never downloaded at runtime. Relative to the CWD
 # the server runs from (backend/).
 YOLO_WEIGHTS_PATH = os.environ.get("YOLO_WEIGHTS_PATH", "weights/best.pt")
+# Cap torch's intra-op thread pool for CPU inference. On a fractional-CPU host
+# (e.g. Render's free tier) torch otherwise starts one thread per *host* core and
+# thrashes on the tiny CPU slice the container actually gets — often slower than
+# 1-2 threads. Unset leaves torch's default. Pair with OMP_NUM_THREADS (which must
+# be an env var, read before torch imports) for the same value across libraries.
+_torch_threads = os.environ.get("TORCH_NUM_THREADS", "").strip()
+TORCH_NUM_THREADS = int(_torch_threads) if _torch_threads else None
 
 # Supabase. SUPABASE_SERVICE_KEY must be the *service_role* key: it's trusted,
 # bypasses RLS, and must never be exposed to the frontend.
