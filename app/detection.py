@@ -141,7 +141,9 @@ class YoloEngine:
     them installed). The model is loaded once and kept resident on the instance.
     """
 
-    def __init__(self, weights_path: str, confidence: float, iou: float) -> None:
+    def __init__(
+        self, weights_path: str, confidence: float, iou: float, imgsz: int
+    ) -> None:
         import torch  # lazy: heavy, optional dependency
         from ultralytics import YOLO
 
@@ -159,6 +161,7 @@ class YoloEngine:
             ) from exc
         self._confidence = confidence
         self._iou = iou
+        self._imgsz = imgsz
         # ultralytics reuses mutable per-model state across predict() calls, so the
         # shared resident model can't be run from two executor threads at once.
         self._lock = threading.Lock()
@@ -176,7 +179,11 @@ class YoloEngine:
         # mutable state that concurrent executor threads would corrupt.
         with self._lock:
             results = self._model.predict(
-                image, conf=self._confidence, iou=self._iou, verbose=False
+                image,
+                conf=self._confidence,
+                iou=self._iou,
+                imgsz=self._imgsz,
+                verbose=False,
             )
             # ultralytics' predict() return is loosely typed to the checker; cast so
             # we can iterate its Results (each has .names / .boxes) without spurious
@@ -207,6 +214,7 @@ def get_engine(name: str) -> DetectionEngine:
             config.YOLO_WEIGHTS_PATH,
             config.CONFIDENCE_THRESHOLD,
             config.IOU_THRESHOLD,
+            config.YOLO_IMGSZ,
         )
     raise ValueError(
         f"Unknown INFERENCE_ENGINE {name!r} (expected 'mock' or 'yolo')"

@@ -42,6 +42,10 @@ YOLO_WEIGHTS_PATH = os.environ.get("YOLO_WEIGHTS_PATH", "weights/best.pt")
 # be an env var, read before torch imports) for the same value across libraries.
 _torch_threads = os.environ.get("TORCH_NUM_THREADS", "").strip()
 TORCH_NUM_THREADS = int(_torch_threads) if _torch_threads else None
+# Inference resolution. Compute scales ~quadratically with this, so 640 → 416 → 320
+# is the biggest single CPU speedup lever — at an accuracy cost that's worst for the
+# smallest objects (platelets). ultralytics rounds up to a multiple of 32.
+YOLO_IMGSZ = int(os.environ.get("YOLO_IMGSZ", "640"))
 
 # Supabase. SUPABASE_SERVICE_KEY must be the *service_role* key: it's trusted,
 # bypasses RLS, and must never be exposed to the frontend.

@@ -89,21 +89,22 @@ def test_yolo_engine_forwards_thresholds_to_predict():
     recorded = {}
 
     class _RecordingModel:
-        def predict(self, image, conf, iou, verbose):
-            recorded.update(conf=conf, iou=iou, verbose=verbose)
+        def predict(self, image, conf, iou, imgsz, verbose):
+            recorded.update(conf=conf, iou=iou, imgsz=imgsz, verbose=verbose)
             return []  # no Results → predict() returns an empty list
 
     engine = YoloEngine.__new__(YoloEngine)  # skip real weight loading
     engine._model = _RecordingModel()  # type: ignore[assignment]
     engine._confidence = 0.33
     engine._iou = 0.55
+    engine._imgsz = 512
     engine._lock = threading.Lock()
 
     buffer = io.BytesIO()
     Image.new("RGB", (32, 32), "white").save(buffer, format="PNG")
 
     assert engine.predict(buffer.getvalue()) == []
-    assert recorded == {"conf": 0.33, "iou": 0.55, "verbose": False}
+    assert recorded == {"conf": 0.33, "iou": 0.55, "imgsz": 512, "verbose": False}
 
 
 # --- real inference smoke test (skipped when torch/ultralytics absent) -------
@@ -117,7 +118,7 @@ _ULTRALYTICS_AVAILABLE = importlib.util.find_spec("ultralytics") is not None
 def test_yolo_engine_runs_and_returns_valid_detections():
     from app.detection import YoloEngine
 
-    engine = YoloEngine(config.YOLO_WEIGHTS_PATH, 0.25, 0.45)
+    engine = YoloEngine(config.YOLO_WEIGHTS_PATH, 0.25, 0.45, 320)
     buffer = io.BytesIO()
     Image.new("RGB", (640, 640), "white").save(buffer, format="JPEG")
 
