@@ -88,6 +88,43 @@ build). These are large; a first request after a cold start is slow (process sta
 + model load). On a small host (e.g. Render's free ~512 MB tier) the resident model
 may exceed available memory — the fix is a larger host, not loading per request.
 
+#### Testing the real (yolo) engine
+
+Test **locally first** — the model is heavy and a small host may OOM.
+
+```bash
+# .env may already set INFERENCE_ENGINE=yolo; otherwise pass it inline:
+INFERENCE_ENGINE=yolo fastapi dev app/main.py
+```
+
+At startup you'll see the engine banner in the logs (added so "is the real engine
+live?" is never a guess):
+
+```
+INFO:milodetects:Loading inference engine 'yolo'...
+INFO:milodetects:Inference engine ready: yolo (weights=weights/best.pt)
+```
+
+If you see `Loading...` with no `ready`, the model load hung or OOM'd. The `mock`
+engine loads nothing and only logs `Inference engine ready: mock`.
+
+Then upload a real smear via http://127.0.0.1:8000/docs (`POST /analyze`) or:
+
+```bash
+curl -F "files=@smear.jpg" -F "sample=BLD01" http://127.0.0.1:8000/analyze
+```
+
+Verify: detections come back (not all zeros); **platelet counts are non-zero on an
+image that has platelets** (confirms the plural `Platelets` class maps correctly);
+boxes visibly align with cells. Tune `CONFIDENCE_THRESHOLD` (default 0.25) and
+`IOU_THRESHOLD` (default 0.45; lower it if RBCs get double-boxed) without code changes.
+
+**On Render:** set `INFERENCE_ENGINE=yolo` in the dashboard env vars and redeploy.
+Watch the logs for the banner and for any OOM/restart on the free tier.
+
+> Tests always run against the `mock` engine (pinned in `tests/conftest.py`), so a
+> local `.env` with `INFERENCE_ENGINE=yolo` doesn't make `pytest` invoke the model.
+
 ### Supabase setup (one-time)
 
 > The Supabase project is **shared** with another app (Miloscribe), whose public

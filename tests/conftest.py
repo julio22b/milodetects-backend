@@ -1,6 +1,7 @@
 import pytest
 
 from app import main
+from app.detection import MockEngine
 
 
 class FakePersistence:
@@ -40,10 +41,11 @@ def fake_persist(monkeypatch):
     hermetic and needs no Supabase config. Request this fixture to inspect what
     was saved; override app.main.persist directly for custom read data.
 
-    Also clears the lazily-built inference engine so each test rebuilds it from the
-    current config (default: the mock) instead of inheriting a prior test's engine.
+    Also pins the inference engine to the mock, so the suite is deterministic and
+    hermetic regardless of INFERENCE_ENGINE in the developer's .env (yolo would run
+    the real model on the tiny test images and return nothing).
     """
     fake = FakePersistence()
     monkeypatch.setattr(main, "persist", fake)
-    monkeypatch.setattr(main, "engine", None)
+    monkeypatch.setattr(main, "engine", MockEngine())
     return fake

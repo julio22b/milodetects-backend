@@ -14,6 +14,15 @@ from app import config, detection
 from app.persistence import Persistence, get_persistence
 
 logger = logging.getLogger("milodetects")
+# uvicorn doesn't configure the root logger, so app-level INFO would otherwise be
+# swallowed (only WARNING+ reaches stderr via logging's last-resort handler). Attach
+# our own handler so the startup engine banner and rejected-upload warnings show in
+# dev and on Render. propagate stays on so pytest's caplog still captures records.
+if not logger.handlers:
+    _log_handler = logging.StreamHandler()
+    _log_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+    logger.addHandler(_log_handler)
+    logger.setLevel(logging.INFO)
 
 # Persistence backend, created lazily so importing this module never requires
 # Supabase config (tests substitute a fake). The lifespan below forces it at
@@ -38,7 +47,16 @@ engine: detection.DetectionEngine | None = None
 def _engine() -> detection.DetectionEngine:
     global engine
     if engine is None:
+        # Logged before AND after the build: for yolo the load takes a moment, so if
+        # the process OOMs/hangs mid-load you'll see "Loading..." with no "ready".
+        logger.info("Loading inference engine %r...", config.INFERENCE_ENGINE)
         engine = detection.get_engine(config.INFERENCE_ENGINE)
+        detail = (
+            f" (weights={config.YOLO_WEIGHTS_PATH})"
+            if config.INFERENCE_ENGINE == "yolo"
+            else ""
+        )
+        logger.info("Inference engine ready: %s%s", config.INFERENCE_ENGINE, detail)
     return engine
 
 
