@@ -1,10 +1,21 @@
 # MiloDetects — backend
 
-A small FastAPI service that accepts a blood-smear image and returns detected
-cells (WBC / RBC / Platelets). Detection runs a trained **YOLOv8** model in-process
-(`INFERENCE_ENGINE=yolo`); a hardcoded **mock** engine (`INFERENCE_ENGINE=mock`, the
-default) keeps the same response shape for tests and offline frontend work, so the
-app boots and the suite runs without the ML dependencies installed.
+FastAPI service for **MiloDetects**, an assistive blood smear analysis tool: it
+takes a photographed microscope field and returns the blood cells detected in it
+(WBC / RBC / Platelets) as labeled bounding boxes and per-field counts. Detection
+runs a self-hosted, fine-tuned YOLOv8 model in-process.
+
+> It detects and localizes cells.
+> It does not perform a clinical differential or produce diagnostic values.
+
+**Live demo:** <!-- TODO: link --> · **Frontend repo:** <!-- TODO: link --> ·
+**Project write-up:** <!-- TODO: link to portfolio case study -->
+
+The rest of this document is operational — how to run, configure, test, and deploy
+the service. For the project overview, architecture, and model details, see the
+write-up linked above.
+
+---
 
 ## Layout
 
@@ -65,16 +76,16 @@ Configuration comes from environment variables, loaded from a local `.env` file
 (git-ignored) if present. **Supabase is required** — the server fails fast at
 startup if `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` aren't set.
 
-| Variable               | Default                 | Notes                                                              |
-| ---------------------- | ----------------------- | ------------------------------------------------------------------ |
-| `SUPABASE_URL`         | — (required)            | Project URL.                                                       |
-| `SUPABASE_SERVICE_KEY` | — (required)            | **service_role** key. Server-only — never ship it to the frontend. |
-| `SUPABASE_BUCKET`      | `milodetects-smears`    | Storage bucket for images.                                         |
-| `ALLOWED_ORIGINS`      | `http://localhost:5173` | Comma-separated browser origins for CORS.                          |
+| Variable               | Default                 | Notes                                                                                                                                             |
+| ---------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`         | — (required)            | Project URL.                                                                                                                                      |
+| `SUPABASE_SERVICE_KEY` | — (required)            | **service_role** key. Server-only — never ship it to the frontend.                                                                                |
+| `SUPABASE_BUCKET`      | `milodetects-smears`    | Storage bucket for images.                                                                                                                        |
+| `ALLOWED_ORIGINS`      | `http://localhost:5173` | Comma-separated browser origins for CORS.                                                                                                         |
 | `INFERENCE_ENGINE`     | `mock`                  | `yolo` runs the trained model; `mock` returns fixed detections. **Set to `yolo` in production** — the default would otherwise serve mock results. |
-| `CONFIDENCE_THRESHOLD` | `0.25`                  | Min detection score (yolo only).                                   |
-| `IOU_THRESHOLD`        | `0.45`                  | NMS overlap threshold (yolo only); lower merges duplicate boxes more aggressively. |
-| `YOLO_WEIGHTS_PATH`    | `weights/best.pt`       | Path to the committed model weights.                               |
+| `CONFIDENCE_THRESHOLD` | `0.25`                  | Min detection score (yolo only).                                                                                                                  |
+| `IOU_THRESHOLD`        | `0.45`                  | NMS overlap threshold (yolo only); lower merges duplicate boxes more aggressively.                                                                |
+| `YOLO_WEIGHTS_PATH`    | `weights/best.pt`       | Path to the committed model weights.                                                                                                              |
 
 ### Inference
 
@@ -85,8 +96,9 @@ silent fallback to mock). `mock` needs no ML dependencies.
 
 The `yolo` engine requires `torch` + `ultralytics` (in `requirements.txt`, CPU-only
 build). These are large; a first request after a cold start is slow (process start
-+ model load). On a small host (e.g. Render's free ~512 MB tier) the resident model
-may exceed available memory — the fix is a larger host, not loading per request.
+
+- model load). On a small host (e.g. Render's free ~512 MB tier) the resident model
+  may exceed available memory — the fix is a larger host, not loading per request.
 
 #### Testing the real (yolo) engine
 
