@@ -79,6 +79,11 @@ app.add_middleware(
 )
 
 ALLOWED_FORMATS = {"PNG", "JPEG"}
+# Microscope objectives the frontend's dropdown offers. A per-image label sent
+# parallel to `files`; anything outside this set is dropped (not stored) without
+# failing the analysis. Domain constant, deliberately not env-configurable — same
+# treatment as ALLOWED_FORMATS.
+ALLOWED_MAGNIFICATIONS = {"4x", "10x", "40x", "100x"}
 MAX_IMAGES = config.MAX_IMAGES
 # Guards memory/DoS, NOT Supabase's Storage limit: the original is only held in
 # memory for inference + downscaling, and the copy sent to Storage is the small
@@ -158,7 +163,13 @@ async def root():
 async def analyze(
     files: list[UploadFile] = File(...),
     sample: str = Form("TEST", max_length=8),
+    magnifications: list[str] = Form(default=[]),
 ):
+    # `magnifications` is optional and rides parallel to `files`, paired by
+    # position (the frontend sends them in the same order). Repeated form fields
+    # collect into a list; absent → []. One of ALLOWED_MAGNIFICATIONS per image —
+    # an unrecognized or missing value is dropped (stored as None) and never fails
+    # the analysis.
     # `sample` is temporarily optional: absent or blank/whitespace-only falls back
     # to a placeholder until the frontend always sends one.
     sample = sample.strip() or "TEST"
@@ -177,9 +188,18 @@ async def analyze(
     batch_id = str(uuid4())
     results = []
 
+    # A count that doesn't line up with the images is a frontend bug worth
+    # surfacing, but it must not fail the batch: pairing below is by index, so a
+    # short list leaves the tail unpaired (None) and a long one ignores extras.
+    if magnifications and len(magnifications) != len(files):
+        logger.warning(
+            "magnifications count (%d) != files count (%d); pairing by index",
+            len(magnifications), len(files),
+        )
+
     # Results are appended one-per-file in order; the frontend correlates each
     # result to the image it uploaded by position, so order must be preserved.
-    for file in files:
+    for index, file in enumerate(files):
         if file.size is not None and file.size > MAX_IMAGE_BYTES:
             mb = MAX_IMAGE_BYTES // (1024 * 1024)
             logger.warning(
@@ -241,6 +261,25 @@ async def analyze(
             )
             t_downscale = time.perf_counter()
 
+            # Resolve this image's magnification: keep it only if it's one we
+            # recognise, else drop to None and note why. Never fails the analysis.
+            raw_magnification = (
+                magnifications[index].strip() if index < len(magnifications) else ""
+            )
+            if not raw_magnification:
+                magnification = None
+                magnification_error = None
+            elif raw_magnification in ALLOWED_MAGNIFICATIONS:
+                magnification = raw_magnification
+                magnification_error = None
+            else:
+                magnification = None
+                magnification_error = f"Unrecognized magnification {raw_magnification!r}"
+                logger.warning(
+                    "Invalid magnification %r for %s; storing none",
+                    raw_magnification, file.filename,
+                )
+
             analysis_id = str(uuid4())
             image_path = await loop.run_in_executor(
                 None,
@@ -254,6 +293,7 @@ async def analyze(
                     extension=STORED_EXTENSION,
                     summary=summary,
                     detections=detection_dicts,
+                    magnification=magnification,
                 ),
             )
             t_save = time.perf_counter()
@@ -273,16 +313,20 @@ async def analyze(
             )
             continue
 
-        results.append(
-            {
-                "id": analysis_id,
-                "status": "completed",
-                "content_type": STORED_CONTENT_TYPE,
-                "image_url": backend.public_url(image_path),
-                "detections": detection_dicts,
-                "summary": summary,
-            }
-        )
+        result = {
+            "id": analysis_id,
+            "status": "completed",
+            "content_type": STORED_CONTENT_TYPE,
+            "image_url": backend.public_url(image_path),
+            "detections": detection_dicts,
+            "summary": summary,
+            "magnification": magnification,
+        }
+        # Only present when a value was sent but not recognised — lets the frontend
+        # flag it while still showing the (completed) analysis.
+        if magnification_error:
+            result["magnification_error"] = magnification_error
+        results.append(result)
 
     return {
         "count": len(results),

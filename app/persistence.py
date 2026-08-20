@@ -35,6 +35,7 @@ class Persistence(Protocol):
         extension: str,
         summary: dict[str, int],
         detections: list[dict],
+        magnification: str | None,
     ) -> str:
         """Store the image (+ rows, in Supabase mode). Returns the image path/key."""
         ...
@@ -78,6 +79,7 @@ class SupabasePersistence:
         extension,
         summary,
         detections,
+        magnification,
     ) -> str:
         key = f"analyses/{analysis_id}{extension}"
 
@@ -95,6 +97,7 @@ class SupabasePersistence:
                 "id": analysis_id,
                 "batch_id": batch_id,
                 "sample": sample,
+                "magnification": magnification,
                 "image_path": key,
                 "content_type": content_type,
                 "status": "processing",
@@ -151,7 +154,9 @@ class SupabasePersistence:
             list[dict[str, Any]],
             (
                 self._client.table("analyses")
-                .select("id,batch_id,created_at,image_path,status,summary,sample")
+                .select(
+                    "id,batch_id,created_at,image_path,status,summary,sample,magnification"
+                )
                 .in_("batch_id", batch_ids)
                 .order("created_at")
                 .execute()
@@ -180,6 +185,7 @@ class SupabasePersistence:
                             "image_url": self.public_url(img["image_path"]),
                             "status": img["status"],
                             "summary": img["summary"],
+                            "magnification": img.get("magnification"),
                         }
                         for img in images
                     ],
@@ -191,7 +197,7 @@ class SupabasePersistence:
         response = (
             self._client.table("analyses")
             .select(
-                "id,created_at,image_path,content_type,status,summary,sample,"
+                "id,created_at,image_path,content_type,status,summary,sample,magnification,"
                 "detections(cell_type,confidence,x,y,width,height)"
             )
             .eq("batch_id", batch_id)
@@ -213,6 +219,7 @@ class SupabasePersistence:
                     "content_type": row["content_type"],
                     "status": row["status"],
                     "summary": row["summary"],
+                    "magnification": row.get("magnification"),
                     "detections": row.get("detections", []),
                 }
                 for row in rows

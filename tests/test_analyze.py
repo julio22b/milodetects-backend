@@ -153,6 +153,64 @@ def test_analyze_rejects_oversized_file(fake_persist, monkeypatch):
     assert fake_persist.saved == []  # rejected before being read or persisted
 
 
+# --- magnification (per-image, optional) ------------------------------------
+
+
+def test_analyze_forwards_magnifications_per_image(fake_persist):
+    body = client.post(
+        "/analyze",
+        files=png_uploads(2),
+        data={"sample": SAMPLE, "magnifications": ["40x", "100x"]},
+    ).json()
+
+    # Paired to files by position, both persisted and echoed back per image.
+    assert fake_persist.saved[0]["magnification"] == "40x"
+    assert fake_persist.saved[1]["magnification"] == "100x"
+    assert body["results"][0]["magnification"] == "40x"
+    assert body["results"][1]["magnification"] == "100x"
+    assert "magnification_error" not in body["results"][0]
+
+
+def test_analyze_magnification_omitted_is_none(fake_persist):
+    # Optional: no field sent → stored as None, echoed as null, no error note.
+    body = client.post("/analyze", files=png_uploads(1), data={"sample": SAMPLE}).json()
+
+    assert fake_persist.saved[0]["magnification"] is None
+    assert body["results"][0]["magnification"] is None
+    assert "magnification_error" not in body["results"][0]
+
+
+def test_analyze_invalid_magnification_still_completes(fake_persist):
+    # A bad value must NOT fail the analysis: the image is still detected and
+    # persisted, the value is dropped to None, and a note explains why.
+    body = client.post(
+        "/analyze",
+        files=png_uploads(1),
+        data={"sample": SAMPLE, "magnifications": ["5x"]},
+    ).json()
+
+    result = body["results"][0]
+    assert result["status"] == "completed"          # analysis went through
+    assert result["magnification"] is None           # bad value dropped
+    assert "5x" in result["magnification_error"]     # ...but reported
+    assert len(fake_persist.saved) == 1              # still persisted
+    assert fake_persist.saved[0]["magnification"] is None
+
+
+def test_analyze_magnification_count_mismatch_pairs_by_index(fake_persist):
+    # Fewer magnifications than images: pair what we can, leave the tail None,
+    # never 400.
+    body = client.post(
+        "/analyze",
+        files=png_uploads(2),
+        data={"sample": SAMPLE, "magnifications": ["40x"]},
+    ).json()
+
+    assert [r["status"] for r in body["results"]] == ["completed", "completed"]
+    assert fake_persist.saved[0]["magnification"] == "40x"
+    assert fake_persist.saved[1]["magnification"] is None
+
+
 # --- Downscaling for storage ------------------------------------------------
 
 

@@ -11,7 +11,7 @@ class FakePersistence:
         self.saved = []
 
     def save_analysis(self, *, analysis_id, batch_id, sample, image_bytes,
-                      content_type, extension, summary, detections):
+                      content_type, extension, summary, detections, magnification):
         self.saved.append(
             {
                 "analysis_id": analysis_id,
@@ -21,6 +21,7 @@ class FakePersistence:
                 "extension": extension,
                 "summary": summary,
                 "detections": detections,
+                "magnification": magnification,
             }
         )
         return f"analyses/{analysis_id}{extension}"

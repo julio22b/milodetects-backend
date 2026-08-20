@@ -86,6 +86,7 @@ def save(persistence, **overrides):
         extension=".png",
         summary={"WBC": 1, "RBC": 1, "Platelets": 0},
         detections=DETECTIONS,
+        magnification=None,
     )
     kwargs.update(overrides)
     return persistence.save_analysis(**kwargs)
@@ -94,7 +95,7 @@ def save(persistence, **overrides):
 def test_save_analysis_happy_path_sequence(monkeypatch):
     persistence, fake = make_persistence(monkeypatch)
 
-    key = save(persistence)
+    key = save(persistence, magnification="40x")
 
     assert key == "analyses/A.png"
     assert ("from_", "milodetects-smears") in fake.calls
@@ -110,6 +111,7 @@ def test_save_analysis_happy_path_sequence(monkeypatch):
     assert analyses_insert["id"] == "A"
     assert analyses_insert["batch_id"] == "B"
     assert analyses_insert["sample"] == SAMPLE
+    assert analyses_insert["magnification"] == "40x"
     assert analyses_insert["status"] == "processing"
 
     # ...detections inserted as ONE bulk list, each stamped with analysis_id...
@@ -198,6 +200,7 @@ def _row(batch_id, i, created_at):
         "image_path": f"analyses/{batch_id}-img{i}.jpg",
         "status": "completed",
         "summary": {"WBC": 1, "RBC": 2, "Platelets": 0},
+        "magnification": "10x",
     }
 
 
@@ -226,6 +229,7 @@ def test_list_batches_returns_whole_batches_not_truncated(monkeypatch):
     # Earliest image's timestamp — consistent with get_batch.
     assert batch["created_at"] == "2026-07-30T10:00:00Z"
     assert batch["images"][0]["image_url"].startswith("https://x.supabase.co/")
+    assert batch["images"][0]["magnification"] == "10x"  # surfaced per image
 
 
 def test_list_batches_orders_batches_newest_first(monkeypatch):
