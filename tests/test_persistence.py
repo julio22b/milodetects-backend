@@ -144,11 +144,12 @@ def test_save_analysis_marks_failed_when_detections_insert_fails(monkeypatch):
 class FakeReadTable:
     """Honors order/limit/in_ over a fixed list of analyses rows."""
 
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict]):
         self._rows = rows
         self._desc = False
         self._limit = None
         self._in = None
+        self._eq = None
 
     def select(self, columns):
         return self
@@ -165,17 +166,24 @@ class FakeReadTable:
         self._in = set(values)
         return self
 
+    def eq(self, column, value):
+        self._eq = (column, value)
+        return self
+
     def execute(self):
         rows = sorted(self._rows, key=lambda r: r["created_at"], reverse=self._desc)
         if self._in is not None:
             rows = [r for r in rows if r["batch_id"] in self._in]
+        if self._eq is not None:
+            column, value = self._eq
+            rows = [r for r in rows if r.get(column) == value]
         if self._limit is not None:
             rows = rows[: self._limit]
         return SimpleNamespace(data=rows)
 
 
 class FakeReadClient:
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict]):
         self._rows = rows
 
     def table(self, name):
@@ -243,3 +251,17 @@ def test_list_batches_orders_batches_newest_first(monkeypatch):
     batches = persistence.list_batches(limit=10)
 
     assert [b["batch_id"] for b in batches] == ["B3", "B2", "B1"]
+
+
+def test_get_batch_surfaces_magnification_per_image(monkeypatch):
+    # get_batch selects and returns magnification per image, for re-render.
+    rows = [
+        {**_row("B1", 0, "2026-07-30T09:00:00Z"),
+         "content_type": "image/jpeg", "detections": []},
+    ]
+    persistence = make_read_persistence(monkeypatch, rows)
+
+    batch = persistence.get_batch("B1")
+
+    assert batch is not None
+    assert batch["images"][0]["magnification"] == "10x"  # from _row

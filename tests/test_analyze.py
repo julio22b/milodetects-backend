@@ -211,6 +211,48 @@ def test_analyze_magnification_count_mismatch_pairs_by_index(fake_persist):
     assert fake_persist.saved[1]["magnification"] is None
 
 
+def test_analyze_magnification_extra_values_ignored(fake_persist):
+    # More magnifications than images: the extras are simply dropped, no 400.
+    body = client.post(
+        "/analyze",
+        files=png_uploads(1),
+        data={"sample": SAMPLE, "magnifications": ["40x", "100x"]},
+    ).json()
+
+    assert body["results"][0]["status"] == "completed"
+    assert body["results"][0]["magnification"] == "40x"
+    assert len(fake_persist.saved) == 1  # only the one real image
+
+
+def test_analyze_magnification_is_trimmed(fake_persist):
+    # A padded-but-valid value is accepted (stored trimmed).
+    body = client.post(
+        "/analyze",
+        files=png_uploads(1),
+        data={"sample": SAMPLE, "magnifications": ["  40x  "]},
+    ).json()
+
+    assert body["results"][0]["magnification"] == "40x"
+    assert fake_persist.saved[0]["magnification"] == "40x"
+    assert "magnification_error" not in body["results"][0]
+
+
+def test_analyze_blank_magnification_is_reported_not_swallowed(fake_persist):
+    # A value that WAS sent but is whitespace-only is treated as unrecognized
+    # (dropped + reported), not silently omitted — distinct from sending nothing.
+    body = client.post(
+        "/analyze",
+        files=png_uploads(1),
+        data={"sample": SAMPLE, "magnifications": ["   "]},
+    ).json()
+
+    result = body["results"][0]
+    assert result["status"] == "completed"
+    assert result["magnification"] is None
+    assert "magnification_error" in result  # not swallowed like an omitted value
+    assert fake_persist.saved[0]["magnification"] is None
+
+
 # --- Downscaling for storage ------------------------------------------------
 
 

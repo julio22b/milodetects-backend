@@ -163,7 +163,7 @@ async def root():
 async def analyze(
     files: list[UploadFile] = File(...),
     sample: str = Form("TEST", max_length=8),
-    magnifications: list[str] = Form(default=[]),
+    magnifications: list[str] = Form(default_factory=list),
 ):
     # `magnifications` is optional and rides parallel to `files`, paired by
     # position (the frontend sends them in the same order). Repeated form fields
@@ -261,23 +261,27 @@ async def analyze(
             )
             t_downscale = time.perf_counter()
 
-            # Resolve this image's magnification: keep it only if it's one we
-            # recognise, else drop to None and note why. Never fails the analysis.
-            raw_magnification = (
-                magnifications[index].strip() if index < len(magnifications) else ""
-            )
-            if not raw_magnification:
+            # Resolve this image's magnification. A value is "sent" for this image
+            # only if the parallel list reaches this index; a shorter list leaves
+            # the tail unset (None, no error). A value that IS sent but isn't one we
+            # recognise — including a blank/whitespace-only one — is dropped to None
+            # and noted (so a stuck/garbage field isn't silently swallowed). Never
+            # fails the analysis. The original (unstripped) value is echoed in the
+            # note so " " and "" are distinguishable in logs.
+            if index >= len(magnifications):
                 magnification = None
                 magnification_error = None
-            elif raw_magnification in ALLOWED_MAGNIFICATIONS:
-                magnification = raw_magnification
+            elif magnifications[index].strip() in ALLOWED_MAGNIFICATIONS:
+                magnification = magnifications[index].strip()
                 magnification_error = None
             else:
                 magnification = None
-                magnification_error = f"Unrecognized magnification {raw_magnification!r}"
+                magnification_error = (
+                    f"Unrecognized magnification {magnifications[index]!r}"
+                )
                 logger.warning(
                     "Invalid magnification %r for %s; storing none",
-                    raw_magnification, file.filename,
+                    magnifications[index], file.filename,
                 )
 
             analysis_id = str(uuid4())

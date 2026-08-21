@@ -8,10 +8,10 @@ runs a self-hosted, fine-tuned YOLOv8 model in-process.
 > It detects and localizes cells.
 > It does not perform a clinical differential or produce diagnostic values.
 
-**Live demo:** <!-- TODO: link --> · **Frontend repo:** <!-- TODO: link --> ·
-**Project write-up:** <!-- TODO: link to portfolio case study -->
+**Live demo:** [Live](https://milodetects-frontend.vercel.app/)
+**Frontend repo:** [Frontend](https://github.com/julio22b/milodetects-frontend) ·
 
-The rest of this document is operational — how to run, configure, test, and deploy
+The rest of this document explains how to run, configure, test, and deploy
 the service. For the project overview, architecture, and model details, see the
 write-up linked above.
 
@@ -39,6 +39,10 @@ backend/
 - `POST /analyze` — upload up to 10 images with an optional `sample` form field (a
   text id, ≤8 chars, identifying the batch; defaults to `TEST` for now); persists
   each to Supabase and returns per-image detections plus the `batch_id` and `sample`.
+  Optionally send a `magnifications` field **once per image, in the same order as
+  `files`** — each one of `4x` / `10x` / `40x` / `100x`. It's per-image metadata:
+  an unrecognized value is dropped (stored as null) and reported as a per-image
+  `magnification_error` **without failing the analysis**; omitting it stores null.
 - `GET /batches?limit=N` — the N most recent batches, newest first (default 50,
   max 100). e.g. `?limit=3` for a "recent analyses" section.
 - `GET /batches/{batch_id}` — one batch's images + detections, for re-render.
@@ -160,6 +164,8 @@ Watch the logs for the banner and for any OOM/restart on the free tier.
       error_message text,
       smear_type    text not null default 'blood'
                       check (smear_type in ('blood','urine','feces')),
+      magnification text                    -- per-image objective; null if unset
+                      check (magnification in ('4x','10x','40x','100x')),
       notes         text,
       summary       jsonb,
       user_id       uuid
@@ -189,6 +195,14 @@ Watch the logs for the banner and for any OOM/restart on the free tier.
     > alter table analyses
     >   alter column sample set not null,
     >   add constraint analyses_sample_len check (char_length(sample) between 1 and 8);
+    > ```
+    >
+    > **Existing project (adding `magnification`):** it's nullable, so no backfill —
+    > NULL passes the CHECK:
+    >
+    > ```sql
+    > alter table analyses add column magnification text
+    >   check (magnification in ('4x','10x','40x','100x'));
     > ```
 
 3. **Enable RLS with NO policies** on both tables. With no policies, the shared
