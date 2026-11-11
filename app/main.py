@@ -5,7 +5,7 @@ import time
 from collections import Counter
 from contextlib import asynccontextmanager
 from functools import partial
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,7 +78,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ALLOWED_FORMATS = {"PNG", "JPEG"}
+# Pillow's detected format, not the client's content-type. "MPO" is a multi-picture
+# JPEG — what many phone cameras write to a .jpg (the extra frames are a depth map
+# or preview). Its first frame is the ordinary photo, which is all Pillow decodes
+# unless asked to seek, so it's handled as a JPEG everywhere downstream.
+JPEG_FORMATS = {"JPEG", "MPO"}
+ALLOWED_FORMATS = {"PNG"} | JPEG_FORMATS
 # Microscope objectives the frontend's dropdown offers. A per-image label sent
 # parallel to `files`; anything outside this set is dropped (not stored) without
 # failing the analysis. Domain constant, deliberately not env-configurable — same
@@ -90,6 +95,12 @@ MAX_IMAGES = config.MAX_IMAGES
 # downscaled JPEG. Phone cameras routinely emit 12-15 MB PNGs (Chrome mobile
 # especially), so keep this generous or every phone upload is rejected.
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
+# Guards decoded size, which MAX_IMAGE_BYTES can't: a flat-colour PNG of a few KB
+# can declare enough pixels to decode to hundreds of MB (3 bytes/pixel as RGB, and
+# the pipeline holds more than one copy). Pillow's own bomb check only *warns* up to
+# 2x its threshold, so this is what actually rejects. 64 MP admits the 48-50 MP
+# full-resolution modes of current phone cameras; ordinary shots are ~12 MP.
+MAX_IMAGE_PIXELS = 64_000_000
 
 # Stored images are downscaled to this longest-side size and re-encoded as JPEG
 # to keep Storage small (~1 GB free tier). Detections are normalised (0..1), so
@@ -104,16 +115,25 @@ class InvalidUpload(ValueError):
 
 
 def _validate_image(contents: bytes) -> None:
-    """Raise InvalidUpload unless the bytes are an allowed image (PNG or JPEG)."""
+    """Raise InvalidUpload unless the bytes are an allowed image (PNG or JPEG)
+    with a pixel count we're willing to decode."""
     try:
         with Image.open(io.BytesIO(contents)) as image:
             image_format = image.format
-            image.verify()
+            width, height = image.size  # from the header; nothing decoded yet
+            # Checked before verify() so an oversized image is never read through.
+            if width * height <= MAX_IMAGE_PIXELS:
+                image.verify()
     except (OSError, Image.DecompressionBombError):
         raise InvalidUpload("File is not a valid image")
 
     if image_format not in ALLOWED_FORMATS:
         raise InvalidUpload(f"File type not allowed (detected {image_format})")
+    if width * height > MAX_IMAGE_PIXELS:
+        raise InvalidUpload(
+            f"Image too large ({width}x{height} pixels; "
+            f"max {MAX_IMAGE_PIXELS // 1_000_000} megapixels)"
+        )
 
 
 def _normalize_orientation(contents: bytes) -> bytes:
@@ -132,7 +152,7 @@ def _normalize_orientation(contents: bytes) -> bytes:
         upright = ImageOps.exif_transpose(image)
 
     buffer = io.BytesIO()
-    if source_format == "JPEG":
+    if source_format in JPEG_FORMATS:  # an MPO comes out as a single-frame JPEG
         upright.save(buffer, format="JPEG", quality=95)  # near-lossless re-encode
     else:
         upright.save(buffer, format=source_format)
@@ -349,20 +369,25 @@ async def list_batches(limit: int = 50):
 
 
 @app.get("/batches/{batch_id}")
-async def get_batch(batch_id: str):
+async def get_batch(batch_id: UUID):
+    # Typed as UUID so a malformed id is a 422 here rather than a Postgres
+    # "invalid input syntax for type uuid" error (a 500) from the uuid column.
+    # Persistence takes the canonical string form.
     loop = asyncio.get_running_loop()
-    batch = await loop.run_in_executor(None, _persistence().get_batch, batch_id)
+    batch = await loop.run_in_executor(
+        None, _persistence().get_batch, str(batch_id)
+    )
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
     return batch
 
 
 @app.delete("/batches/{batch_id}")
-async def delete_batch(batch_id: str):
+async def delete_batch(batch_id: UUID):
     loop = asyncio.get_running_loop()
     removed = await loop.run_in_executor(
-        None, _persistence().delete_batch, batch_id
+        None, _persistence().delete_batch, str(batch_id)
     )
     if removed == 0:
         raise HTTPException(status_code=404, detail="Batch not found")
-    return {"batch_id": batch_id, "deleted_images": removed}
+    return {"batch_id": str(batch_id), "deleted_images": removed}

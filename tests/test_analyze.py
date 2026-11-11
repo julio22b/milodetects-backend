@@ -153,6 +153,79 @@ def test_analyze_rejects_oversized_file(fake_persist, monkeypatch):
     assert fake_persist.saved == []  # rejected before being read or persisted
 
 
+def make_mpo_bytes(orientation: int | None = None, size=(64, 32)) -> bytes:
+    """A multi-picture JPEG, as many phone cameras emit. Pillow reports its
+    format as "MPO", not "JPEG"."""
+    frame = Image.new("RGB", size, color="white")
+    kwargs = {}
+    if orientation is not None:
+        exif = Image.Exif()
+        exif[0x0112] = orientation
+        kwargs["exif"] = exif
+    buffer = io.BytesIO()
+    frame.save(
+        buffer, format="MPO", save_all=True, append_images=[frame.copy()], **kwargs
+    )
+    return buffer.getvalue()
+
+
+def test_analyze_accepts_mpo_phone_jpeg(fake_persist):
+    contents = make_mpo_bytes()
+    with Image.open(io.BytesIO(contents)) as image:
+        assert image.format == "MPO"  # guard: the fixture really is an MPO
+
+    body = client.post(
+        "/analyze",
+        files=[("files", ("phone.jpg", contents, "image/jpeg"))],
+        data={"sample": SAMPLE},
+    ).json()
+
+    assert body["results"][0]["status"] == "completed"
+    assert len(fake_persist.saved) == 1
+
+
+def test_normalize_orientation_rotates_mpo_into_a_plain_jpeg():
+    # Orientation 6 = rotate 90deg: a 64x32 frame becomes 32x64, re-encoded as a
+    # single-frame JPEG with the orientation baked in.
+    upright = _normalize_orientation(make_mpo_bytes(orientation=6))
+
+    with Image.open(io.BytesIO(upright)) as image:
+        assert image.format == "JPEG"
+        assert image.size == (32, 64)
+        assert image.getexif().get(0x0112, 1) == 1
+
+
+def test_analyze_rejects_image_with_too_many_pixels(fake_persist, monkeypatch):
+    # Pixel count, not byte size, is what costs memory once decoded: a few KB of
+    # PNG can decode to hundreds of MB.
+    monkeypatch.setattr("app.main.MAX_IMAGE_PIXELS", 64 * 64 - 1)
+
+    body = client.post("/analyze", files=png_uploads(1), data={"sample": SAMPLE}).json()
+
+    result = body["results"][0]
+    assert result["status"] == "failed"
+    assert "too large" in result["error"].lower()
+    assert result["id"] is None
+    assert fake_persist.saved == []
+
+
+def test_analyze_accepts_image_at_the_pixel_limit(fake_persist, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_IMAGE_PIXELS", 64 * 64)
+
+    body = client.post("/analyze", files=png_uploads(1), data={"sample": SAMPLE}).json()
+
+    assert body["results"][0]["status"] == "completed"
+
+
+def test_default_pixel_limit_is_below_pillows_warning_threshold():
+    # Above Pillow's own threshold it only *warns* until 2x, so our cap must sit
+    # under it to be the thing that actually rejects.
+    from app.main import MAX_IMAGE_PIXELS
+
+    assert Image.MAX_IMAGE_PIXELS is not None
+    assert MAX_IMAGE_PIXELS <= Image.MAX_IMAGE_PIXELS
+
+
 # --- magnification (per-image, optional) ------------------------------------
 
 
